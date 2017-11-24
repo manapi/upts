@@ -176,10 +176,13 @@ verify1(Env, X, T) :-
 verify1(Env, fun(X, T1, E), forall(X, T1, T2)) :-
     verify(Env, T1, type),
     verify1([X:T1|Env], E, T2).
+	
 verify1(Env, app(F, A), T2) :-
     verify(Env, F, pi(X, T1, T3)),
     verify(Env, A, T1),
     subst(Env, X, A, T3, T2).
+	
+	
 verify1(Env, pi(X, T1, T2), type) :-
     verify(Env, T1, type), verify([X:T1|Env], T2, type).
 verify1(Env, forall(X, T1, T2), T) :- verify1(Env, pi(X, T1, T2), T).
@@ -223,6 +226,7 @@ infer(Env, (Ei : T), Eo, T1) :- check(Env, T, type, T1), check(Env, Ei, T1, Eo).
 %% !!!À COMPLÉTER!!!
 
 
+
 %% check(+Env, +Ei, +T, -Eo)
 %% Élabore Ei (dans un contexte Env) en Eo, en s'assurant que son type soit T.
 check(_Env, MV, _, Eo) :-
@@ -235,6 +239,43 @@ check(_Env, MV, _, Eo) :-
     var(MV), !, Eo = MV.
 check(Env, Ei, T, Eo) :- expand(Ei, Ei1), check(Env, Ei1, T, Eo).
 %% !!!À COMPLÉTER!!!
+
+	%%Pour l'initialisation de l'environnement.
+	%% Est-ce que c'est comme cela quon devrait l'écrire? Eo =
+	%% Pour les listes dans nil et cons, faudrait-il faire un check pour trouver le type de list?
+
+check(Env, type, type, Eo) :- Eo = type.
+check(Env, (int -> float), type, Eo) :- Eo = pi(x, int, float).
+check(Env, (int -> bool), type, Eo) :- Eo = pi(x, int, bool).
+check(Env, (type -> int -> type), type, Eo) :- 
+									Eo = pi(t, type, pi(n, int, type)).
+check(Env, (int -> int -> int), type, Eo) :- Eo = pi(x, int, pi(x, int, int)).
+check( Env, (float -> float -> float), T, Eo) :-
+									Eo = pi(x, float, pi(x, float, float)).
+check( Env, (float -> float -> int), T, Eo) :- 
+									Eo = pi(x, float, pi(x, float, int)).
+check( Env, forall(t, (bool -> t -> t -> t)) , T, Eo) :- 
+									Eo = pi(t, type, pi(x, bool,
+											pi(x, type, pi(x, type, type)))).
+check( Env, forall(t, list(t, 0)), T, Eo) :-
+									Eo = pi(t, type, pi(t, type,
+											pi(0, int, type))).
+check( Env, forall([t,n], (t -> list(t, n) -> list(t, n + 1))), T, Eo) :- 
+							        Eo = pi(t, type, 
+									pi(n, int, pi(y, pi(t, type, 
+									pi(n, int, type)), 
+									pi(t, type, pi(n+1, int, type))))).
+
+
+%% Trouve le type de X dans l'environnement									
+check(Env, X, type, Eo) :- verify1(Env, X, Eo).
+
+%% Donne la forme en interne.
+
+%%check(Env, Ei, (pi(X, E1, E2)), Eo) :- Eo = fun(X, E1, E2).  
+
+
+
 %% Finalement, cas par défaut:
 check(Env, Ei, T, Eo) :-
     infer(Env, Ei, Eo1, T1),
@@ -253,6 +294,9 @@ elaborate_env(Env, [X:Ti|Envi], Envo) :-
              elaborate_env([X:To|Env], Envi, Envo));
     write(user_error, 'FAILED_TO_ELABORATE'(Ti)), nl(user_error), !, fail.
 
+
+	
+	
 initenv(Env) :-
     elaborate_env(
         [type : type],
@@ -271,26 +315,26 @@ initenv(Env) :-
          nil :  forall(t, list(t, 0)),
          cons : forall([t,n],
                        (t -> list(t, n) ->
-                            list(t, n + 1)))],
+                            list(t, n + 1)))
+							],
         Env).
 
 %% Quelques expressions pour nos tests.
-%%sample(1).
-%%sample(1 + 2).
-%%sample(1 / 2).
-%%sample(cons(13,nil)).
-%%sample(cons(1.0, cons(2.0, nil))).
-%%sample(let([fact(n:int) = if(n < 2, 1, n * fact(n - 1))],
-%%           fact(44))).
-%%sample(let([fact(n) : (int -> int) = if(n < 2, 1, n * fact(n - 1))],
-%%           fact(45))).
-%%sample(let([list1 : forall(a, (a -> list(a, 1))) = fun(x, cons(x, nil))],
-%%           list1(42))).
-%%sample(let([list1(x) : forall(a, (a -> list(a, 1))) = cons(x, nil)],
-%%           list1(43))).
-%%sample(let([pushn(n,l) : pi(n, _, (list(int,n) -> list(int,n+1))) = cons(n,l)],
+sample(1 + 2). %% app(app(+ 1) 2) -
+sample(1 / 2).
+sample(cons(13,nil)).
+sample(cons(1.0, cons(2.0, nil))).
+sample(let([fact(n:int) = if(n < 2, 1, n * fact(n - 1))],
+           fact(44))).
+sample(let([fact(n) : (int -> int) = if(n < 2, 1, n * fact(n - 1))],
+           fact(45))).
+sample(let([list1 : forall(a, (a -> list(a, 1))) = fun(x, cons(x, nil))],
+           list1(42))).
+sample(let([list1(x) : forall(a, (a -> list(a, 1))) = cons(x, nil)],
+           list1(43))).
+sample(let([pushn(n,l) : pi(n, _, (list(int,n) -> list(int,n+1))) = cons(n,l)],
            %% L'argument `n` ne peut être que 0, ici, et on peut l'inférer!
-%%          pushn(_,nil))).
+           pushn(_,nil))).
 
 %% Roule le test sur une expression.
 test_sample(Env, E) :-
@@ -306,6 +350,3 @@ test_sample(Env, E) :-
 %% Roule le test sur chacune des expressions de `sample`.
 test_samples :-
     initenv(Env), sample(E), test_sample(Env, E).
-	
-test_env :-
-    initenv(Env).
