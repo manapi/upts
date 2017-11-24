@@ -225,6 +225,32 @@ infer(_, X, X, float) :- float(X).
 infer(Env, (Ei : T), Eo, T1) :- check(Env, T, type, T1), check(Env, Ei, T1, Eo).
 %% !!!À COMPLÉTER!!!
 
+    %%Pour l'initialisation de l'environnement.
+    %% Pour les listes dans nil et cons, faudrait-il faire un check pour trouver le type de list?
+	
+infer(Env, type, type, type).
+infer(Env, (int -> float), pi(x, int, float), type).
+infer(Env, (int -> bool), pi(x, int, bool), type).
+infer(Env, (type -> int -> type), pi(t, type, pi(n, int, type)), type).
+infer(Env, (int -> int -> int), pi(x, int, pi(x, int, int)), type).
+infer(Env, (float -> float -> float), pi(x, float, pi(x, float, float)), type).
+infer(Env, (float -> float -> int), pi(x, float, pi(x, float, int)), type).
+infer(Env, forall(t, (bool -> t -> t -> t)), 
+                                        pi(t, type, pi(x, bool, pi(x, type, 
+                                            pi(x, type, type)))),
+                                               type).
+infer(Env, forall(t, list(t, 0)), 
+                             pi(t, type, pi(t, type, pi(0, int, type))),
+                                 type).
+infer(Env, forall([t,n], (t -> list(t, n) -> list(t, n + 1))),
+                                    pi(t, type, pi(n, int, pi(y, 
+                                        pi(t, type, pi(n, int, type)), 
+                                           pi(t, type, pi(n+1, int, type))))), 
+										       type).
+
+
+
+
 
 
 %% check(+Env, +Ei, +T, -Eo)
@@ -240,42 +266,9 @@ check(_Env, MV, _, Eo) :-
 check(Env, Ei, T, Eo) :- expand(Ei, Ei1), check(Env, Ei1, T, Eo).
 %% !!!À COMPLÉTER!!!
 
-	%%Pour l'initialisation de l'environnement.
-	%% Est-ce que c'est comme cela quon devrait l'écrire? Eo =
-	%% Pour les listes dans nil et cons, faudrait-il faire un check pour trouver le type de list?
-
-
-check(Env, type, type, Eo) :- Eo = type.
-check(Env, (int -> float), type, Eo) :- Eo = pi(x, int, float).
-check(Env, (int -> bool), type, Eo) :- Eo = pi(x, int, bool).
-check(Env, (type -> int -> type), type, Eo) :- 
-									Eo = pi(t, type, pi(n, int, type)).
-check(Env, (int -> int -> int), type, Eo) :- Eo = pi(x, int, pi(x, int, int)).
-check( Env, (float -> float -> float), T, Eo) :-
-									Eo = pi(x, float, pi(x, float, float)).
-check( Env, (float -> float -> int), T, Eo) :- 
-									Eo = pi(x, float, pi(x, float, int)).
-check( Env, forall(t, (bool -> t -> t -> t)) , T, Eo) :- 
-									Eo = pi(t, type, pi(x, bool,
-											pi(x, type, pi(x, type, type)))).
-check( Env, forall(t, list(t, 0)), T, Eo) :-
-									Eo = pi(t, type, pi(t, type,
-											pi(0, int, type))).
-check( Env, forall([t,n], (t -> list(t, n) -> list(t, n + 1))), T, Eo) :- 
-							        Eo = pi(t, type, 
-									pi(n, int, pi(y, pi(t, type, 
-									pi(n, int, type)), 
-									pi(t, type, pi(n+1, int, type))))).
-
-
-%% Trouve le type de X dans l'environnement									
-%%check(Env, X, type, Eo) :- verify1(Env, X, Eo).
-
-%% Donne la forme en interne.
-
-%%check(Env, Ei, (pi(X, E1, E2)), Eo) :- Eo = fun(X, E1, E2).  
-
-
+check(Env, Ei, type, Eo) :-
+    %%Pour l'initialisation de l'environnement.
+    infer(Env, Ei, Eo, type).
 
 
 %% Finalement, cas par défaut:
@@ -292,8 +285,7 @@ check(Env, Ei, T, Eo) :-
 elaborate_env(Env, [], Env).
 elaborate_env(Env, [X:Ti|Envi], Envo) :-
     check(Env, Ti, type, To) ->
-        (verify(Env, To, type) ->
-             elaborate_env([X:To|Env], Envi, Envo));
+        (verify(Env, To, type) -> elaborate_env([X:To|Env], Envi, Envo));
     write(user_error, 'FAILED_TO_ELABORATE'(Ti)), nl(user_error), !, fail.
 
 
