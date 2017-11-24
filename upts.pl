@@ -244,6 +244,7 @@ check(Env, Ei, T, Eo) :- expand(Ei, Ei1), check(Env, Ei1, T, Eo).
 	%% Est-ce que c'est comme cela quon devrait l'écrire? Eo =
 	%% Pour les listes dans nil et cons, faudrait-il faire un check pour trouver le type de list?
 
+
 check(Env, type, type, Eo) :- Eo = type.
 check(Env, (int -> float), type, Eo) :- Eo = pi(x, int, float).
 check(Env, (int -> bool), type, Eo) :- Eo = pi(x, int, bool).
@@ -268,11 +269,12 @@ check( Env, forall([t,n], (t -> list(t, n) -> list(t, n + 1))), T, Eo) :-
 
 
 %% Trouve le type de X dans l'environnement									
-check(Env, X, type, Eo) :- verify1(Env, X, Eo).
+%%check(Env, X, type, Eo) :- verify1(Env, X, Eo).
 
 %% Donne la forme en interne.
 
 %%check(Env, Ei, (pi(X, E1, E2)), Eo) :- Eo = fun(X, E1, E2).  
+
 
 
 
