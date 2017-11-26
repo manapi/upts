@@ -175,6 +175,7 @@ verify1(Env, X, T) :-
     atom(X), (member(X:T1, Env) -> T = T1; fail).
 verify1(Env, fun(X, T1, E), forall(X, T1, T2)) :-
     verify(Env, T1, type),
+	%%write(user_error, 'x devrait être ajouter').
     verify1([X:T1|Env], E, T2).
 	
 verify1(Env, app(F, A), T2) :-
@@ -185,7 +186,9 @@ verify1(Env, app(F, A), T2) :-
 	
 verify1(Env, pi(X, T1, T2), type) :-
     verify(Env, T1, type), verify([X:T1|Env], T2, type).
+	
 verify1(Env, forall(X, T1, T2), T) :- verify1(Env, pi(X, T1, T2), T).
+
 verify1(Env, let(X, T, E1, E2), Tret) :-
     verify(Env, T, type),
     Env1 = [X:T|Env],
@@ -202,8 +205,19 @@ verify1(Env, let(X, T, E1, E2), Tret) :-
 %% Remplace un élement de sucre syntaxique dans Ei, donnant Eo.
 %% Ne renvoie jamais un Eo égal à Ei.
 expand(MV, _) :- var(MV), !, fail.
-expand((T1 -> T2), pi(X, T1, T2)) :- genatom('dummy_', X).
+expand((T1 -> T2), pi(X, T1, T2)) :- genatom('x_', X).
 %% !!!À COMPLÉTER!!!
+expand((T1->T2->T3), pi(X, T1, pi(Y, T2, T3))) :- 
+                                             genatom('x_', X), genatom('y_', Y).
+expand((T1->T2->T3->T4), pi(X, T1, pi(Y, T2, pi(Z, T3, T4)))) :- 
+                          genatom('x_', X), genatom('y_', Y), genatom('z_', Z).
+
+expand(forall([], F), Fo):- expand(F, Fo).
+expand(forall([n | Ts], F), forall(n, int, Fo)) :- genatom('x_',X), expand(forall(Ts, F), Fo).
+expand(forall([T | Ts], F), forall(T, type, Fo)) :- genatom('x_',X), expand(forall(Ts, F), Fo).
+
+expand(forall(T, F), forall(T, type, Fo)) :- genatom('x_', X), expand(F, Fo).
+expand(list(T,N), pi(T, type, pi(N, int, type))).
 
 
 %% coerce(+Env, +E1, +T1, +T2, -E2)
@@ -222,35 +236,76 @@ infer(_, MV, MV, _) :- var(MV), !.            %Une expression encore inconnue.
 infer(Env, Ei, Eo, T) :- expand(Ei, Ei1), infer(Env, Ei1, Eo, T).
 infer(_, X, X, int) :- integer(X).
 infer(_, X, X, float) :- float(X).
-infer(Env, (Ei : T), Eo, T1) :- check(Env, T, type, T1), check(Env, Ei, T1, Eo).
+infer(Env, (Ei : T), Eo, T1) :- check(Env, T, type, T1), check(Env, Ei, T1, Eo). 
 %% !!!À COMPLÉTER!!!
 
-    %%Pour l'initialisation de l'environnement.
-    %% Pour les listes dans nil et cons, faudrait-il faire un check pour trouver le type de list?
+%% Règle de typage 
+
+%% Règle 2: Inférence du type d'une fonction
+%% 1)Vérifier que E1 est un type en l'élaborant
+%% 2) Mettre x comme e1 dans le contexte, inférer le type de e2 en l'élaborant aussi
+infer(Env, fun(X, E1, E2), fun(X, E1o, E2o), pi(X, E1, E3)) :- 
+   check(Env, E1, type, E1o),
+   infer([X:E1o|Env], E2, E2o, E3).  %%ajout de X:E1o (Y or N)
+
+%% Règle 4: Inférence du type "type" à pi(), soit un type de fonction.
+%% 1) Vérifier que e1 est un type en l'élaborant.
+%% 2) Vérifier que e2 est un type en l'élaborant. (Mettre x dans le contexte)
+infer(Env, pi(X, E1, E2), pi(X, E1o, E2o), type) :-
+    check(Env, E1, type, E1o),
+    check([X:E1o|Env], E2, type, E2o). %%ajout de X:E1o (Y|N)
+
+%% Règle 4.1: lorsqu'on a un un type list, il faut aller l'expand. 	
+infer(Env, pi(X, list(T, N), list(T1, N1)), pi(X, E1oo, E2oo), type):-
+    expand(list(T,N), E1o),
+    infer(Env, E1o, E1oo, type),
+	expand(list(T1, N1), E2o),
+    infer(Env, E2o, E2oo, type).
+
+
+%% Règle 5: Inférence du type "type" à forall().
+%% 1) Vérifier que e1 est un type en l'élaborant.
+%% 2) Vérifier que e2 est un type en l'élaborant. (Mettre x dans le contexte)
+infer(Env, forall(X, E1, E2), forall(X, E1o, E2o), type) :-
+    check(Env, E1, type, E1o),
+    check([X:E1o|Env], E2, type, E2o). %%ajout de X:E1o (Y|N)
+
+
+%% Règle 6: Inférence du type d'un appel de fonction.
+%% 1) Inférer le type de e1 comme un pi en l'élaborant 
+%% 2) Vérifier que le type de e2 soit e4 en l'élaborant. (mettre x dans le contexte)
+infer(Env, app(E1, E2), app(E1o, E2o), Eo) :-
+    infer(Env, E1, E1o, pi(X, E4, E5)),
+    check(Env, E2, E4, E2o),
+	subst(Env, X, E2o, E5, Eo). %% Vraiment pas très sûre.
+
+%%Règle 7: Inférence du type d'une déclaration.
+%% 1) Vérifier que e1 soit un type
+%% 2) Ajouter x:e1 dans le contexte, vérifier que e2 est comme type e1
+%% 3) Ajouter x:e1 dans le contexte, inférer le type e3 comme e4.
+infer(Env, let(X, E1, E2, E3), let(X, E1o, E2o, E3o), E4) :-
+    check(Env, E1, type, E1o),
+    check([X:E1o|Env], E2, E1o, E2o),    %%ajout de X:E1o (Y|N)
+	infer([X:E1o|Env], E3, E3o, E4).     %%ajout de X:E1o (Y|N)
+
+%%Règle 8: Inférence du type d'une déclaration sucrée.
+%% Je vais assumer que x est déjà dans l'environnement.
+%% Comme Expand ne prends pas l'environnement, ça sert à rien de l'envoyer à expand.
+%% 1) Inférer le type de e2 comme e1 en l'élaborant.
+%% 2) Inférer le type de e3 comme e4 en l'élaborant.
+infer(Env, let(X, E2, E3), let(X, E1, E2o, E3o), E4):-
+    infer(Env, E2, E2o, E1),
+	%%check(Env, X, E1, Xo),    %% Juste pour être sûr 
+    infer(Env, E3, E3o, E4).
+
+%%Règle 9: Inférence du type d'une annotation de type explicite.
+%% 1) Vérifier que e2 est bien un type.
+%% 2) Vérifier que e1 est de type e2.
+infer(Env, E1:E2, E1o:E2o, E2o):-
+    check(Env, E2, type, E2o),
+    check(Env, E1, E2, E1o).
 	
-infer(Env, type, type, type).
-infer(Env, (int -> float), pi(x, int, float), type).
-infer(Env, (int -> bool), pi(x, int, bool), type).
-infer(Env, (type -> int -> type), pi(t, type, pi(n, int, type)), type).
-infer(Env, (int -> int -> int), pi(x, int, pi(x, int, int)), type).
-infer(Env, (float -> float -> float), pi(x, float, pi(x, float, float)), type).
-infer(Env, (float -> float -> int), pi(x, float, pi(x, float, int)), type).
-infer(Env, forall(t, (bool -> t -> t -> t)), 
-                                        pi(t, type, pi(x, bool, pi(x, type, 
-                                            pi(x, type, type)))),
-                                               type).
-infer(Env, forall(t, list(t, 0)), 
-                             pi(t, type, pi(t, type, pi(0, int, type))),
-                                 type).
-infer(Env, forall([t,n], (t -> list(t, n) -> list(t, n + 1))),
-                                    pi(t, type, pi(n, int, pi(y, 
-                                        pi(t, type, pi(n, int, type)), 
-                                           pi(t, type, pi(n+1, int, type))))), 
-										       type).
-
-
-
-
+	
 
 
 %% check(+Env, +Ei, +T, -Eo)
@@ -263,12 +318,39 @@ check(_Env, MV, _, Eo) :-
     %% cas de toute façon, et pour les cas restants on se repose sur le filet
     %% de sécurité qu'est `verify`.
     var(MV), !, Eo = MV.
-check(Env, Ei, T, Eo) :- expand(Ei, Ei1), check(Env, Ei1, T, Eo).
+check(Env, Ei, T, Eo) :- expand(Ei, Ei1), check(Env, Ei1, T, Eo). %% PREMIER ARRÊT POUR L'INITIATION DE L'ENV
 %% !!!À COMPLÉTER!!!
 
-check(Env, Ei, type, Eo) :-
-    %%Pour l'initialisation de l'environnement.
-    infer(Env, Ei, Eo, type).
+%% Règles de typage:
+	
+%% Règle 3: Vérification du type d'une fonction sucrée
+%% 1) Voir, si dans l'environnement, on sait quelle est le type de X et qu'il est bien e_1 
+%% 2) Vu que ce n'est qu'un check on devrait connaître au complet les paramétres de pi(x, e_1, e_3)
+%%    Alors, on check si e_2 est de type e_3 
+%% 3) Vu comment Expand est fait ce sucre ne sera pas traiter par celui-ci
+%% THÉORIQUEMENT, on aurait déjà mis X:E1 dans l'environnement plus haut dans l'arbre, donc je peux regarder et il devrait pas y avoir de problème.
+check(Env, fun(X, E2), pi(X, E1, E3), fun(X, Eo1, Eo2)):-
+    check(Env, X, E1, Eo1),
+	check(Env, E2, E3, Eo2).
+    
+%%Règle 10: Vérifcation d'un type:
+%% 1) Inférer le type de e1 dans e2.
+%% 2) Normaliser e2 et e3 et voir si c'est équivalent.
+check(Env, E1, E3, E1o):-
+     infer(Env, E1, E1o, E2), %% APRÈS EXPAND, DEUXIÈME ARRÊT POUR L'INITIATION DE L'ENV ET FIN.
+     normalize(Env, E2, E3).
+	
+%%Règle 11: Vérification d'un forall():
+%%Je vais assumer pour l'instant que x est typé comme e2 dans l'env. 
+%% 1) Vérfier que e1 est de type e3.
+check(Env, E1, forall(X, E2, E3), Eo):-
+    check([X:E2|Env], E1, E3, Eo).            %%ajout de X:E1o (Y|N)
+
+%% Vérifier que X est dans l'environnement et bien de type X. 
+%% Utilisé:
+%%         - Régle 2: Elle permet de vérifier que E1 est bien un type. 
+check([X:T|Envs], X, T, X).
+check([_:_|Envs], X, T, Eo) :- check(Envs, X, T, Eo).
 
 
 %% Finalement, cas par défaut:
@@ -307,9 +389,8 @@ initenv(Env) :-
          (<) : (float -> float -> int),
          if : forall(t, (bool -> t -> t -> t)),
          nil :  forall(t, list(t, 0)),
-         cons : forall([t,n],
-                       (t -> list(t, n) ->
-                            list(t, n + 1)))
+         cons : forall([t,n], (t -> list(t, n) -> list(t, n + 1))) %%forall(t,type,forall(n,int,pi(x_Nz,t,pi(y_7,list(t,n),list(t,n+1)))))
+
 							],
         Env).
 
@@ -344,3 +425,38 @@ test_sample(Env, E) :-
 %% Roule le test sur chacune des expressions de `sample`.
 test_samples :-
     initenv(Env), sample(E), test_sample(Env, E).
+	
+	
+	
+	
+%% Rapport des modifications:
+%% J'ai initié l'environnement en premier comme je l'avais fait dans le check, mais dans infer.
+%% Ensuite, je me suis lancée dans les règles de typage dans infer/check sans trouver une bonne façon de les tester.
+%% J'ai ommis les 3 dernières règles de coerce; je ne suis pas encore certaine.
+
+%% Après avoir fini les 11 premières règles de typage, l'initialisation ne se faisait plus correctement.
+%% À cause de: (1) check(Env, Ei, T, Eo) :- expand(Ei, Ei1), check(Env, Ei1, T, Eo).
+
+%% J'ai eu par exemple int_to_bool qui devenait pi(dummy_ x, int, bool)  , ce qui ne faisait plus de sens avec ce que j'avais au départ.
+%% Si on va dans expand, il y a 
+%% Dans le code original: expand((T1 -> T2), pi(X, T1, T2)) :- genatom('dummy_', X).  
+%% ( pour l'instant je l'ai changé pour quelque chose de plus court pour la command GNU prolog)
+%% Ç'a été la preuve que mes règles fonctionnaient, car dans (1) le check(Env, Ei1, T, Eo) fonctionnait.
+
+%% Ainsi, je me suis dis que c'était sans doute ce qu'il fallait que ça fasse. 
+%% Soit qu'on aille dans expand rendre l'environnement immédiatement en langage "interne"
+%% Avant d'inférer leur type et les placer dans la liste de l'environnement.
+
+%% J'ai refait l'initialisation en passant par expand (C'est indiquer le chemin pour l'initialisation dans check).
+
+%% Par contre, je suis incertaine pour le cons.
+%% Dans les données, on dit que ça devrait être pi(t, type, pi(x, t, pi(n, int, pi(y, list(t, n), list(t, n+1))))). 
+%% où list(t, n) = pi(t, type, pi(n, int, type)).
+%% Dans le code à cause du forall, ça me donne: forall(t,type,forall(n,int,pi(x_Nz,t,pi(y_7,list(t,n),list(t,n+1))))) 
+%% (Note, L'expand de list se fait dans infer )
+%% La différence principale est dans forall (C'est pas supposé déranger), et dans l'ordre des variables (exemple, n, int arrive plus tôt dans le code que dans les données).
+%% J'ai passé longtemps à chercher une alternative, mais je ne trouve rien d'aussi satisfaisant que cela.
+
+%% Ce qui reste à faire:
+%% - Commencer les tests   (Car ça me semble plus simple pour implanter tous les cas des différentes expressions du lambda calcul possible du langage).
+%% - Implanter le restant du sucre et la fonction coerce.
