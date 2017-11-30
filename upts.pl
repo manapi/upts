@@ -234,13 +234,9 @@ coerce(Env, E, T1, T2, E) :-
 %% !!!À COMPLÉTER!!!
 
 %% forall
-coerce(Env, E1, forall(X, E2, E3), E4, Eo) :- subst(Env, X, E4, E3, Eo).
-
-coerce(Env, forall(t, type, list(t, 0)), list(int, 0),  app(nil, int)). 
-
+coerce(Env, E1, forall(X, E2, E3), Eo, app(E1, E4)) :- subst(Env, X, E4, E3, Eo).
 %% int to float
 coerce(Env, E, int, float, app(int_to_float, E)).
-
 %% int to bool
 coerce(Env, E, int, bool, app(int_to_bool, E)).
 
@@ -296,7 +292,7 @@ infer(Env, app(E1, E2), app(E1o, E2o), Eo) :-
 infer(Env, app(E1, E2), app(E1o, E2o), Eo) :-
     infer(Env, E1, E1o, forall(X, E4, E5)),
     check(Env, E2, E4, E2o),
-	subst(Env, X, E2o, E5, Eo). %% Vraiment pas très sûre.
+	subst(Env, X, E2o, E5, Eo).
 		
 %%Règle 7: Inférence du type d'une déclaration.
 %% 1) Vérifier que e1 soit un type
@@ -432,9 +428,9 @@ initenv(Env) :-
 %sample(nil).
 %sample(nil(int)).
 %sample(app(nil,int)).
-sample(app(app(app(app(cons, int), 0), 13), app(nil, int))).  % <-- fonctionne
-%sample(app(app(app(app(cons, int), 0), 13), nil)).
-sample(app(app(cons, 13), nil)).  % <-- ne fonctionne pas
+%sample(app(app(app(app(cons, int), 0), 13), app(nil, int))).  
+sample(app(app(app(app(cons, int), 0), 13), nil)). % <-- fonctionne
+sample(app(app(cons, 13), nil)). % <-- ne fonctionne pas
 %sample(cons(13,nil)).
 %sample(cons(1.0, cons(2.0, nil))).
 %sample(let([fact(n:int) = if(n < 2, 1, n * fact(n - 1))],
