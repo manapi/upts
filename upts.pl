@@ -217,8 +217,12 @@ expand(forall([n | Ts], F), forall(n, int, Fo)) :- genatom('x_',X), expand(foral
 expand(forall([T | Ts], F), forall(T, type, Fo)) :- genatom('x_',X), expand(forall(Ts, F), Fo).
 
 expand(forall(T, F), forall(T, type, Fo)) :- genatom('x_', X), expand(F, Fo).
-expand(list(T,N), pi(T, type, pi(N, int, type))).
 
+%expand((T1 -> T2 -> A), pi(X, T1, E)) :- genatom('x_', X), expand(A, E).
+expand(+(E1, E2), app(app(+, E1), E2)). %TODO : generalize for n arguments and any function identifier
+expand(list(E1, E2), app(app(list, E1), E2)). 
+expand(nil(T), app(nil, T)).
+expand(cons(E1, E2), app(app(cons, E1), E2)).
 
 %% coerce(+Env, +E1, +T1, +T2, -E2)
 %% Transforme l'expression E1 (qui a type T1) en une expression E2 de type T2.
@@ -228,6 +232,16 @@ coerce(Env, E, T1, T2, E) :-
     normalize(Env, T2, T2n),
     T1n = T2n.        %T1 = T2: rien à faire!
 %% !!!À COMPLÉTER!!!
+
+%% forall
+coerce(Env, E1, forall(X, E2, E3), E4, Eo) :- subst(Env, X, E4, E3, Eo).
+
+%% int to float
+coerce(Env, E, int, float, app(int_to_float, E)).
+
+%% int to bool
+coerce(Env, E, int, bool, app(int_to_bool, E)).
+
 
 
 %% infer(+Env, +Ei, -Eo, -T)
@@ -240,6 +254,9 @@ infer(Env, (Ei : T), Eo, T1) :- check(Env, T, type, T1), check(Env, Ei, T1, Eo).
 %% !!!À COMPLÉTER!!!
 
 %% Règle de typage 
+
+%% Règle 1 : Inférence du type d'une variable
+infer(Env, X, X, V) :- env_lookup(Env, X, V).
 
 %% Règle 2: Inférence du type d'une fonction
 %% 1)Vérifier que E1 est un type en l'élaborant
@@ -255,14 +272,6 @@ infer(Env, pi(X, E1, E2), pi(X, E1o, E2o), type) :-
     check(Env, E1, type, E1o),
     check([X:E1o|Env], E2, type, E2o). %%ajout de X:E1o (Y|N)
 
-%% Règle 4.1: lorsqu'on a un un type list, il faut aller l'expand. 	
-infer(Env, pi(X, list(T, N), list(T1, N1)), pi(X, E1oo, E2oo), type):-
-    expand(list(T,N), E1o),
-    infer(Env, E1o, E1oo, type),
-	expand(list(T1, N1), E2o),
-    infer(Env, E2o, E2oo, type).
-
-
 %% Règle 5: Inférence du type "type" à forall().
 %% 1) Vérifier que e1 est un type en l'élaborant.
 %% 2) Vérifier que e2 est un type en l'élaborant. (Mettre x dans le contexte)
@@ -276,7 +285,7 @@ infer(Env, forall(X, E1, E2), forall(X, E1o, E2o), type) :-
 %% 2) Vérifier que le type de e2 soit e4 en l'élaborant. (mettre x dans le contexte)
 infer(Env, app(E1, E2), app(E1o, E2o), Eo) :-
     infer(Env, E1, E1o, pi(X, E4, E5)),
-    check(Env, E2, E4, E2o),
+    check(Env, E2, E4, E2o).
 	subst(Env, X, E2o, E5, Eo). %% Vraiment pas très sûre.
 
 %%Règle 7: Inférence du type d'une déclaration.
@@ -304,8 +313,11 @@ infer(Env, let(X, E2, E3), let(X, E1, E2o, E3o), E4):-
 infer(Env, E1:E2, E1o:E2o, E2o):-
     check(Env, E2, type, E2o),
     check(Env, E1, E2, E1o).
-	
-	
+
+%% Fonction auxiliaire	pour chercher une variable dans l'environnement
+%%env_lookup(+Env, +X, -V)
+env_lookup([X:V|Envs], X, V).
+env_lookup([_:_|Envs], X, V) :- env_lookup(Envs, X, V).	
 
 
 %% check(+Env, +Ei, +T, -Eo)
@@ -395,21 +407,35 @@ initenv(Env) :-
         Env).
 
 %% Quelques expressions pour nos tests.
-sample(1 + 2). %% app(app(+ 1) 2) -
-sample(1 / 2).
+%sample(5).
+%sample(1.0).
+%sample(fun(x, int, x)).
+%sample(+).
+%sample(int).
+%sample(app(+, 1)).
+%sample(app(app(+, 1), 2)).
+%sample(1 + 2). 
+%sample(1 / 2).
+%sample(cons).
+sample(list(int, 5)).
+%sample(app(app(list, int), 5)).
+%sample(nil).
+%sample(app(nil,int)).
+%sample(app(app(app(app(cons, int), 1), 13), nil)).
+sample(app(app(cons, 13), nil)).  %infer ~> list(int, 1)
 sample(cons(13,nil)).
-sample(cons(1.0, cons(2.0, nil))).
-sample(let([fact(n:int) = if(n < 2, 1, n * fact(n - 1))],
-           fact(44))).
-sample(let([fact(n) : (int -> int) = if(n < 2, 1, n * fact(n - 1))],
-           fact(45))).
-sample(let([list1 : forall(a, (a -> list(a, 1))) = fun(x, cons(x, nil))],
-           list1(42))).
-sample(let([list1(x) : forall(a, (a -> list(a, 1))) = cons(x, nil)],
-           list1(43))).
-sample(let([pushn(n,l) : pi(n, _, (list(int,n) -> list(int,n+1))) = cons(n,l)],
+%sample(cons(1.0, cons(2.0, nil))).
+%sample(let([fact(n:int) = if(n < 2, 1, n * fact(n - 1))],
+%           fact(44))).
+%sample(let([fact(n) : (int -> int) = if(n < 2, 1, n * fact(n - 1))],
+%           fact(45))).
+%sample(let([list1 : forall(a, (a -> list(a, 1))) = fun(x, cons(x, nil))],
+%           list1(42))).
+%sample(let([list1(x) : forall(a, (a -> list(a, 1))) = cons(x, nil)],
+%           list1(43))).
+%sample(let([pushn(n,l) : pi(n, _, (list(int,n) -> list(int,n+1))) = cons(n,l)],
            %% L'argument `n` ne peut être que 0, ici, et on peut l'inférer!
-           pushn(_,nil))).
+%           pushn(_,nil))).
 
 %% Roule le test sur une expression.
 test_sample(Env, E) :-
@@ -426,7 +452,9 @@ test_sample(Env, E) :-
 test_samples :-
     initenv(Env), sample(E), test_sample(Env, E).
 	
-	
+%% Test l'environnement seulement
+test_env :- 
+	initenv(Env).
 	
 	
 %% Rapport des modifications:
