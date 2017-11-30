@@ -236,6 +236,8 @@ coerce(Env, E, T1, T2, E) :-
 %% forall
 coerce(Env, E1, forall(X, E2, E3), E4, Eo) :- subst(Env, X, E4, E3, Eo).
 
+coerce(Env, forall(t, type, list(t, 0)), list(int, 0),  app(nil, int)). 
+
 %% int to float
 coerce(Env, E, int, float, app(int_to_float, E)).
 
@@ -285,9 +287,17 @@ infer(Env, forall(X, E1, E2), forall(X, E1o, E2o), type) :-
 %% 2) Vérifier que le type de e2 soit e4 en l'élaborant. (mettre x dans le contexte)
 infer(Env, app(E1, E2), app(E1o, E2o), Eo) :-
     infer(Env, E1, E1o, pi(X, E4, E5)),
-    check(Env, E2, E4, E2o).
+    check(Env, E2, E4, E2o),
 	subst(Env, X, E2o, E5, Eo). %% Vraiment pas très sûre.
 
+%% Règle 6.1: Inférence du type d'un appel de fonction avec forall
+%% 1) Inférer le type de e1 comme un pi en l'élaborant 
+%% 2) Vérifier que le type de e2 soit e4 en l'élaborant. (mettre x dans le contexte)
+infer(Env, app(E1, E2), app(E1o, E2o), Eo) :-
+    infer(Env, E1, E1o, forall(X, E4, E5)),
+    check(Env, E2, E4, E2o),
+	subst(Env, X, E2o, E5, Eo). %% Vraiment pas très sûre.
+		
 %%Règle 7: Inférence du type d'une déclaration.
 %% 1) Vérifier que e1 soit un type
 %% 2) Ajouter x:e1 dans le contexte, vérifier que e2 est comme type e1
@@ -417,13 +427,15 @@ initenv(Env) :-
 %sample(1 + 2). 
 %sample(1 / 2).
 %sample(cons).
-sample(list(int, 5)).
+%sample(list(int, 5)).
 %sample(app(app(list, int), 5)).
 %sample(nil).
+%sample(nil(int)).
 %sample(app(nil,int)).
-%sample(app(app(app(app(cons, int), 1), 13), nil)).
-sample(app(app(cons, 13), nil)).  %infer ~> list(int, 1)
-sample(cons(13,nil)).
+sample(app(app(app(app(cons, int), 0), 13), app(nil, int))).  % <-- fonctionne
+%sample(app(app(app(app(cons, int), 0), 13), nil)).
+sample(app(app(cons, 13), nil)).  % <-- ne fonctionne pas
+%sample(cons(13,nil)).
 %sample(cons(1.0, cons(2.0, nil))).
 %sample(let([fact(n:int) = if(n < 2, 1, n * fact(n - 1))],
 %           fact(44))).
