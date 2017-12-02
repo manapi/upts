@@ -207,22 +207,32 @@ verify1(Env, let(X, T, E1, E2), Tret) :-
 expand(MV, _) :- var(MV), !, fail.
 expand((T1 -> T2), pi(X, T1, T2)) :- genatom('x_', X).
 %% !!!À COMPLÉTER!!!
-expand((T1->T2->T3), pi(X, T1, pi(Y, T2, T3))) :- 
-                                             genatom('x_', X), genatom('y_', Y).
-expand((T1->T2->T3->T4), pi(X, T1, pi(Y, T2, pi(Z, T3, T4)))) :- 
-                          genatom('x_', X), genatom('y_', Y), genatom('z_', Z).
 
 expand(forall([], F), Fo):- expand(F, Fo).
 expand(forall([n | Ts], F), forall(n, int, Fo)) :- genatom('x_',X), expand(forall(Ts, F), Fo).
 expand(forall([T | Ts], F), forall(T, type, Fo)) :- genatom('x_',X), expand(forall(Ts, F), Fo).
-
 expand(forall(T, F), forall(T, type, Fo)) :- genatom('x_', X), expand(F, Fo).
 
-%expand((T1 -> T2 -> A), pi(X, T1, E)) :- genatom('x_', X), expand(A, E).
-expand(+(E1, E2), app(app(+, E1), E2)). %TODO : generalize for n arguments and any function identifier
-expand(list(E1, E2), app(app(list, E1), E2)). 
-expand(nil(T), app(nil, T)).
-expand(cons(E1, E2), app(app(cons, E1), E2)).
+expand(X, Eo) :- X =.. [Head|Tail], identifier(Head), Tail \= [], exptail(Head, Tail, Eo).
+expand(let(Decls, E), Eo) :- Decls \= [], parsedecl(E, Decls, Eo). 
+
+%parsedecl(+L, +D, -E)
+% Transforme récursivement en let() une liste de déclarations
+parsedecl(L, [], L).
+parsedecl(L, [X = B|Xs], let(Head, Fun, E)) :- X =.. [Head|Tail], identifier(Head), Tail \= [], parsearg(B, Tail, Fun), parsedecl(L, Xs, E).
+parsedecl(L, [X : T = B|Xs], let(Head, T, Fun, E)) :- X =.. [Head|Tail], identifier(Head), Tail \= [], parsearg(B, Tail, Fun), parsedecl(L, Xs, E).
+parsedecl(L, [X = B|Xs], let(X, B, E)) :- parsedecl(L, Xs, E).
+
+%parsearg(+B, +Args, -E)
+% Transforme récursivement en fun() les arguments d'une fonction
+parsearg(B, [], B).
+parsearg(B, [A:T|As], fun(A, T, Eo)) :- parsearg(B, As, Eo).
+parsearg(B, [A|As], fun(A, Eo)) :- parsearg(B, As, Eo).
+
+%exptail(+Ei, +Args, -Eo)
+% Élimine récursivement le sucre des arguments
+exptail(E, [], E).
+exptail(E, [A|As], Eo) :- exptail(app(E, A), As, Eo).
 
 %% coerce(+Env, +E1, +T1, +T2, -E2)
 %% Transforme l'expression E1 (qui a type T1) en une expression E2 de type T2.
@@ -302,16 +312,13 @@ infer(Env, let(X, E1, E2, E3), let(X, E1o, E2o, E3o), E4) :-
     check(Env, E1, type, E1o),
     check([X:E1o|Env], E2, E1o, E2o),    %%ajout de X:E1o (Y|N)
 	infer([X:E1o|Env], E3, E3o, E4).     %%ajout de X:E1o (Y|N)
-
+	
 %%Règle 8: Inférence du type d'une déclaration sucrée.
-%% Je vais assumer que x est déjà dans l'environnement.
-%% Comme Expand ne prends pas l'environnement, ça sert à rien de l'envoyer à expand.
 %% 1) Inférer le type de e2 comme e1 en l'élaborant.
 %% 2) Inférer le type de e3 comme e4 en l'élaborant.
 infer(Env, let(X, E2, E3), let(X, E1, E2o, E3o), E4):-
-    infer(Env, E2, E2o, E1),
-	%%check(Env, X, E1, Xo),    %% Juste pour être sûr 
-    infer(Env, E3, E3o, E4).
+    infer([X:E1|Env], E2, E2o, E1),
+    infer([X:E1|Env], E3, E3o, E4).
 
 %%Règle 9: Inférence du type d'une annotation de type explicite.
 %% 1) Vérifier que e2 est bien un type.
@@ -320,8 +327,8 @@ infer(Env, E1:E2, E1o:E2o, E2o):-
     check(Env, E2, type, E2o),
     check(Env, E1, E2, E1o).
 
-%% Fonction auxiliaire	pour chercher une variable dans l'environnement
 %%env_lookup(+Env, +X, -V)
+%% Fonction auxiliaire	pour chercher une variable dans l'environnement
 env_lookup([X:V|Envs], X, V).
 env_lookup([_:_|Envs], X, V) :- env_lookup(Envs, X, V).	
 
@@ -347,11 +354,11 @@ check(Env, Ei, T, Eo) :- expand(Ei, Ei1), check(Env, Ei1, T, Eo). %% PREMIER ARR
 %%    Alors, on check si e_2 est de type e_3 
 %% 3) Vu comment Expand est fait ce sucre ne sera pas traiter par celui-ci
 %% THÉORIQUEMENT, on aurait déjà mis X:E1 dans l'environnement plus haut dans l'arbre, donc je peux regarder et il devrait pas y avoir de problème.
-check(Env, fun(X, E2), pi(X, E1, E3), fun(X, Eo1, Eo2)):-
-    check(Env, X, E1, Eo1),
-	check(Env, E2, E3, Eo2).
+check(Env, fun(X, E2), pi(Y, E1, E3), fun(X, E1, Eo2)):-   %WARNING X != Y !!!!!!!! 
+    %check(Env, X, E1, Eo1),
+	check([X:E1|Env], E2, E3, Eo2).
     
-%%Règle 10: Vérifcation d'un type:
+%%Règle 10: Vérification d'un type:
 %% 1) Inférer le type de e1 dans e2.
 %% 2) Normaliser e2 et e3 et voir si c'est équivalent.
 check(Env, E1, E3, E1o):-
@@ -423,18 +430,33 @@ initenv(Env) :-
 %sample(1 + 2). 
 %sample(1 / 2).
 %sample(cons).
+sample(if).
 %sample(list(int, 5)).
 %sample(app(app(list, int), 5)).
 %sample(nil).
 %sample(nil(int)).
 %sample(app(nil,int)).
 %sample(app(app(app(app(cons, int), 0), 13), app(nil, int))).  
-sample(app(app(app(app(cons, int), 0), 13), nil)). % <-- fonctionne
-sample(app(app(cons, 13), nil)). % <-- ne fonctionne pas
+%sample(app(app(app(app(cons, int), 0), 13), nil)). % <-- fonctionne
+%sample(app(app(cons, 13), nil)). % <-- ne fonctionne pas
 %sample(cons(13,nil)).
 %sample(cons(1.0, cons(2.0, nil))).
+%sample(let(x, 5, app(app(+, x), 1))).
+%sample(let(add, pi(x, int, pi(y, int, int)), fun(x, int, fun(y, int, x + y)), add(3, 4))).
+%sample(let(fact, fun(n, int, n), fact(4))).
+%sample(let([x = 5, fact(n, y) : (int -> int -> int) = n + y, add(n:int, y:int) = n + y], fact(4))).
+%sample(if(n < 2, 1 , 2)).
+sample(app(app(app(if, n < 2), 1) , 2)).
+%sample(let([fact(n:int) = n],
+%           fact(44))).
 %sample(let([fact(n:int) = if(n < 2, 1, n * fact(n - 1))],
 %           fact(44))).
+%sample(fun(x, x + 1) : (int -> int)).
+%sample(fun(x, x + 1) : (int -> int)).
+%sample(let([fact(n) : pi(n, int, int) = n],
+%           fact(45))).
+%sample(let([fact(n) : (int -> int) = n],
+%           fact(45))).
 %sample(let([fact(n) : (int -> int) = if(n < 2, 1, n * fact(n - 1))],
 %           fact(45))).
 %sample(let([list1 : forall(a, (a -> list(a, 1))) = fun(x, cons(x, nil))],
@@ -443,7 +465,7 @@ sample(app(app(cons, 13), nil)). % <-- ne fonctionne pas
 %           list1(43))).
 %sample(let([pushn(n,l) : pi(n, _, (list(int,n) -> list(int,n+1))) = cons(n,l)],
            %% L'argument `n` ne peut être que 0, ici, et on peut l'inférer!
-%           pushn(_,nil))).
+ %          pushn(_,nil))).
 
 %% Roule le test sur une expression.
 test_sample(Env, E) :-
@@ -463,36 +485,3 @@ test_samples :-
 %% Test l'environnement seulement
 test_env :- 
 	initenv(Env).
-	
-	
-%% Rapport des modifications:
-%% J'ai initié l'environnement en premier comme je l'avais fait dans le check, mais dans infer.
-%% Ensuite, je me suis lancée dans les règles de typage dans infer/check sans trouver une bonne façon de les tester.
-%% J'ai ommis les 3 dernières règles de coerce; je ne suis pas encore certaine.
-
-%% Après avoir fini les 11 premières règles de typage, l'initialisation ne se faisait plus correctement.
-%% À cause de: (1) check(Env, Ei, T, Eo) :- expand(Ei, Ei1), check(Env, Ei1, T, Eo).
-
-%% J'ai eu par exemple int_to_bool qui devenait pi(dummy_ x, int, bool)  , ce qui ne faisait plus de sens avec ce que j'avais au départ.
-%% Si on va dans expand, il y a 
-%% Dans le code original: expand((T1 -> T2), pi(X, T1, T2)) :- genatom('dummy_', X).  
-%% ( pour l'instant je l'ai changé pour quelque chose de plus court pour la command GNU prolog)
-%% Ç'a été la preuve que mes règles fonctionnaient, car dans (1) le check(Env, Ei1, T, Eo) fonctionnait.
-
-%% Ainsi, je me suis dis que c'était sans doute ce qu'il fallait que ça fasse. 
-%% Soit qu'on aille dans expand rendre l'environnement immédiatement en langage "interne"
-%% Avant d'inférer leur type et les placer dans la liste de l'environnement.
-
-%% J'ai refait l'initialisation en passant par expand (C'est indiquer le chemin pour l'initialisation dans check).
-
-%% Par contre, je suis incertaine pour le cons.
-%% Dans les données, on dit que ça devrait être pi(t, type, pi(x, t, pi(n, int, pi(y, list(t, n), list(t, n+1))))). 
-%% où list(t, n) = pi(t, type, pi(n, int, type)).
-%% Dans le code à cause du forall, ça me donne: forall(t,type,forall(n,int,pi(x_Nz,t,pi(y_7,list(t,n),list(t,n+1))))) 
-%% (Note, L'expand de list se fait dans infer )
-%% La différence principale est dans forall (C'est pas supposé déranger), et dans l'ordre des variables (exemple, n, int arrive plus tôt dans le code que dans les données).
-%% J'ai passé longtemps à chercher une alternative, mais je ne trouve rien d'aussi satisfaisant que cela.
-
-%% Ce qui reste à faire:
-%% - Commencer les tests   (Car ça me semble plus simple pour implanter tous les cas des différentes expressions du lambda calcul possible du langage).
-%% - Implanter le restant du sucre et la fonction coerce.
