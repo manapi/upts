@@ -295,14 +295,40 @@ infer(Env, app(E1, E2), app(E1o, E2o), Eo) :-
     infer(Env, E1, E1o, pi(X, E4, E5)),
     check(Env, E2, E4, E2o),
 	subst(Env, X, E2o, E5, Eo). %% Vraiment pas très sûre.
-
-%% Règle 6.1: Inférence du type d'un appel de fonction avec forall
+	
+%% Règle 6.1: Inférence du type d'un appel de fonction forall.
 %% 1) Inférer le type de e1 comme un pi en l'élaborant 
 %% 2) Vérifier que le type de e2 soit e4 en l'élaborant. (mettre x dans le contexte)
 infer(Env, app(E1, E2), app(E1o, E2o), Eo) :-
     infer(Env, E1, E1o, forall(X, E4, E5)),
     check(Env, E2, E4, E2o),
-	subst(Env, X, E2o, E5, Eo).
+	subst(Env, X, E2o, E5, Eo). %% Vraiment pas très sûre.
+
+%Hard-coded int rule	
+infer(Env, app(app(app(if, B), E1) , E2), app(app(app(app(Io, T1o), Bo), E1o) , E2o), T1o) :-
+	infer(Env, if, Io, TIo),
+	infer(Env, E1, E1o, T1o),
+	infer(Env, E2, E2o, T2o),
+	check(Env, B, bool, Bo).
+	
+%%Hard-coded cons rule
+infer(Env, app(app(cons, E2), L), app(app(app(app(cons, T2o), Y), E2o), Fo), app(app(list, T2o), app(app(+, Y), 1))) :-
+	infer(Env, cons, Io, TIo),
+	infer(Env, E2, E2o, T2o),
+	infer(Env, L, Lo, _),
+	check(Env, Lo, app(app(list, T2o), Y), Fo).
+	
+%% TEST LAURANNE
+%infer(Env, app(E1, E2), app(E1o, E2o), Eo) :-
+%	infer(Env, E1, E1o, forall(X, E4, E5)),
+%	check(Env, E2, E4, E2o),
+%	subst(Env, X, E2o, E5, Eo).
+	
+%infer(Env, app(E1, E2), app(E1o, E2o), E5o) :-
+%	infer(Env, E1, E1o, forall(X, E4, E5)),
+%	infer(Env, E2, E2o, T2),
+%	subst(Env, X, T2, E5, E5o),
+%	check(Env, E1, E5o, Eo).
 		
 %%Règle 7: Inférence du type d'une déclaration.
 %% 1) Vérifier que e1 soit un type
@@ -425,28 +451,21 @@ initenv(Env) :-
 %sample(fun(x, int, x)).
 %sample(+).
 %sample(int).
-%sample(app(+, 1)).
-%sample(app(app(+, 1), 2)).
 %sample(1 + 2). 
 %sample(1 / 2).
 %sample(cons).
-sample(if).
+%sample(if).
 %sample(list(int, 5)).
 %sample(app(app(list, int), 5)).
 %sample(nil).
 %sample(nil(int)).
-%sample(app(nil,int)).
-%sample(app(app(app(app(cons, int), 0), 13), app(nil, int))).  
-%sample(app(app(app(app(cons, int), 0), 13), nil)). % <-- fonctionne
-%sample(app(app(cons, 13), nil)). % <-- ne fonctionne pas
-%sample(cons(13,nil)).
+%sample(cons, 13, nil).
 %sample(cons(1.0, cons(2.0, nil))).
 %sample(let(x, 5, app(app(+, x), 1))).
 %sample(let(add, pi(x, int, pi(y, int, int)), fun(x, int, fun(y, int, x + y)), add(3, 4))).
 %sample(let(fact, fun(n, int, n), fact(4))).
 %sample(let([x = 5, fact(n, y) : (int -> int -> int) = n + y, add(n:int, y:int) = n + y], fact(4))).
-%sample(if(n < 2, 1 , 2)).
-sample(app(app(app(if, n < 2), 1) , 2)).
+%sample(if(3 < 2, 1 , 2)).
 %sample(let([fact(n:int) = n],
 %           fact(44))).
 %sample(let([fact(n:int) = if(n < 2, 1, n * fact(n - 1))],
@@ -457,9 +476,9 @@ sample(app(app(app(if, n < 2), 1) , 2)).
 %           fact(45))).
 %sample(let([fact(n) : (int -> int) = n],
 %           fact(45))).
-%sample(let([fact(n) : (int -> int) = if(n < 2, 1, n * fact(n - 1))],
-%           fact(45))).
-%sample(let([list1 : forall(a, (a -> list(a, 1))) = fun(x, cons(x, nil))],
+sample(let([fact(n) : (int -> int) = if(n < 2, 1, n * fact(n - 1))],  %<------- fonctionne
+           fact(45))).
+%sample(let([list1 : forall(a, (a -> list(a, 1))) = fun(x, cons(x, nil))], %<------- ne fonctionne car forall (et peut être sucre / pas testé)
 %           list1(42))).
 %sample(let([list1(x) : forall(a, (a -> list(a, 1))) = cons(x, nil)],
 %           list1(43))).
