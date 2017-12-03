@@ -200,7 +200,6 @@ verify1(Env, let(X, T, E1, E2), Tret) :-
 %%% Élaboration du langage source vers le langage interne %%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-
 %% expand(+Ei, -Eo)
 %% Remplace un élement de sucre syntaxique dans Ei, donnant Eo.
 %% Ne renvoie jamais un Eo égal à Ei.
@@ -208,20 +207,43 @@ expand(MV, _) :- var(MV), !, fail.
 expand((T1 -> T2), pi(X, T1, T2)) :- genatom('x_', X).
 %% !!!À COMPLÉTER!!!
 
+% Forall
 expand(forall([], F), Fo):- expand(F, Fo).
-expand(forall([n | Ts], F), forall(n, int, Fo)) :- genatom('x_',X), expand(forall(Ts, F), Fo).
-expand(forall([T | Ts], F), forall(T, type, Fo)) :- genatom('x_',X), expand(forall(Ts, F), Fo).
-expand(forall(T, F), forall(T, type, Fo)) :- genatom('x_', X), expand(F, Fo).
+expand(forall([n | Ts], F), forall(n, int, Fo)) :-  
+	expand(forall(Ts, F), Fo).
+expand(forall([T | Ts], F), forall(T, type, Fo)) :-  
+	expand(forall(Ts, F), Fo).
+expand(forall(T, F), forall(T, type, Fo)) :- 
+	expand(F, Fo).
 
-expand(X, Eo) :- X =.. [Head|Tail], identifier(Head), Tail \= [], exptail(Head, Tail, Eo).
-expand(let(Decls, E), Eo) :- Decls \= [], parsedecl(E, Decls, Eo). 
+% Appel de fonction	
+expand(X, Eo) :- 
+	X =.. [Head|Tail], 
+	identifier(Head), 
+	Tail \= [], 
+	exptail(Head, Tail, Eo).
+	
+% Let
+expand(let(Decls, E), Eo) :- 
+	Decls \= [], 
+	parsedecl(E, Decls, Eo). 
 
 %parsedecl(+L, +D, -E)
 % Transforme récursivement en let() une liste de déclarations
 parsedecl(L, [], L).
-parsedecl(L, [X = B|Xs], let(Head, Fun, E)) :- X =.. [Head|Tail], identifier(Head), Tail \= [], parsearg(B, Tail, Fun), parsedecl(L, Xs, E).
-parsedecl(L, [X : T = B|Xs], let(Head, T, Fun, E)) :- X =.. [Head|Tail], identifier(Head), Tail \= [], parsearg(B, Tail, Fun), parsedecl(L, Xs, E).
-parsedecl(L, [X = B|Xs], let(X, B, E)) :- parsedecl(L, Xs, E).
+parsedecl(L, [X = B|Xs], let(Head, Fun, E)) :- 
+	X =.. [Head|Tail], 
+	identifier(Head), Tail \= [], 
+	parsearg(B, Tail, Fun), 
+	parsedecl(L, Xs, E).
+parsedecl(L, [X : T = B|Xs], let(Head, T, Fun, E)) :- 
+	X =.. [Head|Tail], 
+	identifier(Head), 
+	Tail \= [], 
+	parsearg(B, Tail, Fun), 
+	parsedecl(L, Xs, E).
+parsedecl(L, [X = B|Xs], let(X, B, E)) :- 
+	parsedecl(L, Xs, E).
 
 %parsearg(+B, +Args, -E)
 % Transforme récursivement en fun() les arguments d'une fonction
@@ -234,6 +256,7 @@ parsearg(B, [A|As], fun(A, Eo)) :- parsearg(B, As, Eo).
 exptail(E, [], E).
 exptail(E, [A|As], Eo) :- exptail(app(E, A), As, Eo).
 
+
 %% coerce(+Env, +E1, +T1, +T2, -E2)
 %% Transforme l'expression E1 (qui a type T1) en une expression E2 de type T2.
 coerce(Env, E, T1, T2, E) :-
@@ -244,26 +267,22 @@ coerce(Env, E, T1, T2, E) :-
 %% !!!À COMPLÉTER!!!
 
 %% forall
-%coerce(Env, E1, forall(X, E2, E3), Eo, app(E1, E4)) :- subst(Env, X, E4, E3, Eo).
-
 coerce(Env, E1, T1, T2, app(E1, E4)) :- 
 	normalize(Env, T2, Eo),
 	normalize(Env, T1, forall(X, E2, E3)),
 	subst(Env, X, E4, E3, Eo).
 
 %% int to float
-%coerce(Env, E, int, float, app(int_to_float, E)).
-
 coerce(Env, E, T1, T2, app(int_to_float, E)) :- 
 	normalize(Env, T1, int),
 	normalize(Env, T2, float).
+	
 %% int to bool
 coerce(Env, E, T1, T2, app(int_to_bool, E)) :-
 	normalize(Env, T1, int),
 	normalize(Env, T2, bool).
 
-
-
+	
 %% infer(+Env, +Ei, -Eo, -T)
 %% Élabore Ei (dans un contexte Env) en Eo et infère son type T.
 infer(_, MV, MV, _) :- var(MV), !.            %Une expression encore inconnue.
@@ -273,14 +292,12 @@ infer(_, X, X, float) :- float(X).
 infer(Env, (Ei : T), Eo, T1) :- check(Env, T, type, T1), check(Env, Ei, T1, Eo). 
 %% !!!À COMPLÉTER!!!
 
-%% Règle de typage 
-
 %% Règle 1 : Inférence du type d'une variable
 infer(Env, X, X, V) :- env_lookup(Env, X, V).
 
 %% Règle 2: Inférence du type d'une fonction
 %% 1)Vérifier que E1 est un type en l'élaborant
-%% 2) Mettre x comme e1 dans le contexte, inférer le type de e2 en l'élaborant aussi
+%% 2) Mettre x comme e1 dans le contexte, inférer le type de e2 en l'élaborant
 infer(Env, fun(X, E1, E2), fun(X, E1o, E2o), pi(X, E1, E3)) :- 
    check(Env, E1, type, E1o),
    infer([X:E1o|Env], E2, E2o, E3).  %%ajout de X:E1o (Y or N)
@@ -301,21 +318,24 @@ infer(Env, forall(X, E1, E2), forall(X, E1o, E2o), type) :-
 
 %% Règle 6: Inférence du type d'un appel de fonction.
 %% 1) Inférer le type de e1 comme un pi en l'élaborant 
-%% 2) Vérifier que le type de e2 soit e4 en l'élaborant. (mettre x dans le contexte)
+%% 2) Vérifier que le type de e2 soit e4 en l'élaborant. 
 infer(Env, app(E1, E2), app(E1o, E2o), Eo) :-
     infer(Env, E1, E1o, pi(X, E4, E5)),
     check(Env, E2, E4, E2o),
-	subst(Env, X, E2o, E5, Eo). %% Vraiment pas très sûre.
+	subst(Env, X, E2o, E5, Eo).
 
-%Hard-coded if rule	
-infer(Env, app(app(app(if, B), E1) , E2), app(app(app(app(Io, T1o), Bo), E1o) , E2o), T1o) :-
+%Règle de coercion du if	
+infer(Env, app(app(app(if, B), E1) , E2), 
+	app(app(app(app(Io, T1o), Bo), E1o) , E2o), T1o) :-
 	infer(Env, if, Io, TIo),
 	infer(Env, E1, E1o, T1o),
 	infer(Env, E2, E2o, T2o),
 	check(Env, B, bool, Bo).	
 
-%%Hard-coded cons rule
-infer(Env, app(app(cons, E2), L), app(app(app(app(cons, T2o), Y), E2o), Fo), app(app(list, T2o), app(app(+, Y), 1))) :-
+%%Règle de coercion du cons
+infer(Env, app(app(cons, E2), L), 
+	app(app(app(app(cons, T2o), Y), E2o), Fo), 
+	app(app(list, T2o), app(app(+, Y), 1))) :-
 	infer(Env, cons, Io, TIo),
 	infer(Env, E2, E2o, T2o),
 	infer(Env, L, Lo, Too),
@@ -359,41 +379,34 @@ check(_Env, MV, _, Eo) :-
     %% cas de toute façon, et pour les cas restants on se repose sur le filet
     %% de sécurité qu'est `verify`.
     var(MV), !, Eo = MV.
-check(Env, Ei, T, Eo) :- expand(Ei, Ei1), check(Env, Ei1, T, Eo). %% PREMIER ARRÊT POUR L'INITIATION DE L'ENV
+check(Env, Ei, T, Eo) :- expand(Ei, Ei1), check(Env, Ei1, T, Eo).
 %% !!!À COMPLÉTER!!!
 
-%% Règles de typage:
-	
 %% Règle 3: Vérification du type d'une fonction sucrée
-%% 1) Voir, si dans l'environnement, on sait quelle est le type de X et qu'il est bien e_1 
-%% 2) Vu que ce n'est qu'un check on devrait connaître au complet les paramétres de pi(x, e_1, e_3)
+%% 1) Voir on sait quel est le type de X et qu'il est bien e_1 
+%% 2) On devrait connaître au complet les paramétres de pi(x, e_1, e_3)
 %%    Alors, on check si e_2 est de type e_3 
 %% 3) Vu comment Expand est fait ce sucre ne sera pas traiter par celui-ci
-%% THÉORIQUEMENT, on aurait déjà mis X:E1 dans l'environnement plus haut dans l'arbre, donc je peux regarder et il devrait pas y avoir de problème.
-check(Env, fun(X, E2), pi(Y, E1, E3), fun(X, E1, Eo2)):-   %WARNING X != Y !!!!!!!! 
-    %check(Env, X, E1, Eo1),
+check(Env, fun(X, E2), pi(Y, E1, E3), fun(X, E1, Eo2)):-    
 	equal(Env, pi(Y, E1, E3), pi(X, E1, E3)), %renommage-alpha
 	check([X:E1|Env], E2, E3, Eo2).
-    
+  
 %%Règle 10: Vérification d'un type:
 %% 1) Inférer le type de e1 dans e2.
 %% 2) Normaliser e2 et e3 et voir si c'est équivalent.
 check(Env, E1, E3, E1o):-
-     infer(Env, E1, E1o, E2), %% APRÈS EXPAND, DEUXIÈME ARRÊT POUR L'INITIATION DE L'ENV ET FIN.
+     infer(Env, E1, E1o, E2), 
      normalize(Env, E2, E3).
 	
-%%Règle 11: Vérification d'un forall():
-%%Je vais assumer pour l'instant que x est typé comme e2 dans l'env. 
+%%Règle 11: Vérification d'un forall(): 
 %% 1) Vérfier que e1 est de type e3.
 check(Env, E1, forall(X, E2, E3), Eo):-
-    check([X:E2|Env], E1, E3, Eo).            %%ajout de X:E1o (Y|N)
-
+    check([X:E2|Env], E1, E3, Eo).   
 
 %% Finalement, cas par défaut:
 check(Env, Ei, T, Eo) :-
     infer(Env, Ei, Eo1, T1),
     (coerce(Env, Eo1, T1, T, Eo) -> true).
-
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%% Environnement initial et tests %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
