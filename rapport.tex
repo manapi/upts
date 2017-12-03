@@ -1,0 +1,22 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{amsthm}
+\usepackage{amsmath}
+\usepackage{amssymb}
+
+\begin{document}
+\section*{Rapport du travail pratique\\ \small par Amélie Robillard Lacombe et Lauranne Deaudelin}
+
+Le travail pratique consiste à faire l'implantation d'un système d'inférence et de vérification pour le langage $\mu PTS$ pour y faciliter son écriture. Comme dans le travail pratique précédent, il aura fallu un temps considérable pour comprendre les données et de passer par-dessus les obstacles que l’utilisation de Prolog nous a apporté.  Pour ce rapport, nous allons présenter les problématiques rencontrées et les solutions amenées telles qu’ils nous sont apparus. Ainsi, les problèmes discutés seront : l’initialisation de l’environnement/compréhension du code donné, le sucre syntaxique, la fonction coerce/cons.
+\section*{ L’initialisation de l’environnement/compréhension du code donné }
+Lorsque nous sommes arrivées à coder, après maintes lectures des données du travail, il a fallu par débuter par initialiser l’environnement avec la fonction et le tableau déjà fournis. La première chose naïve a été de faire des « case » qui changeait les expressions données en langage source directement dans le check et un peu plus tard, dans infer. À ce moment, l’environnement fonctionnait et donc, nous sommes donc venues à déchiffrer les règles de typage. Après un certain temps, nous avons fini par comprendre que les flèches $\Rightarrow$ signifiaient, lorsqu’elles étaient dans la conclusion, des règles d’inférence de type (infer) tandis que les flèches $\Leftarrow$ signifiaient des règles de vérifications (check). Après avoir pris un peu d’aisance avec Prolog, les règles de typage sans celles de coercions ont été écrites comme elles sont maintenant dans le code (1) et sans plus de difficultés; nous ne comprenions pas encore celles de coercion, mais nous en parlerons dans les prochaines sections. Ainsi, ce n’est qu’après avoir écrit les règles de typage que nous nous sommes rendu compte que les éléments de l’environnement écrits comme ($\alpha$->$\alpha$) étaient typés finalement comme pi(dummy\_[…], $\alpha$, $\alpha$) signe qui nous fait voir qu’on pouvait (et devait) passer par expand pour initialiser l’environnement.  À la suite de cet ajustement, il y eu quelque complication avec le typage de cons, car sa liste d’argument implicites à compliquer un peu la tâche. Cela a été résolu en faisant une récursion du tableau et en obligeant « n » a être de type « int » ; on a validé ce choix par les constantes prédéfinies dans les données où « n » se retrouve. On se retrouve donc avec des forall imbriquées pour le type de cons.
+\section*{Cons/ La fonction coerce}
+Ensuite, ne sachant pas exactement dans quoi nous lancer, nous avons débuté les samples. Les premiers étaient relativement simples et consistaient à l’élimination du sucre syntaxique. Les conflits rencontrés lors de la résolution du sucre syntaxique vont être abordé dans la prochaine section. Vu certains samples, c’est à ce moment que nous nous sommes décidées à coder les règles de coercion. Il faut souligner que la règle des forall a été particulièrement ardu à comprendre. Après cela, les samples se sont complexifiés lorsque nous sommes arrivées au « cons ». Une des difficultés avec cons est que, parmi les samples, c’est le premier à contenir forall pour signifier qu’il prend des arguments implicites.  De plus, la grande complexité de cons est qu’il prend deux types différents de forall, si nous pouvons nous exprimer ainsi. Un des deux forall agit comme du polymorphisme paramétrique et l’autre agit comme un typage dépendant. Ainsi, c’est deux forall, à première vue, ont un comportement différent et doivent être appréhender de façon différente. Puis, si nous poursuivons dans les samples, il y a le if où l’on voit que l’argument implicite ne se trouve pas dans le premier argument passé à la fonction, mais plutôt le deuxième. 
+
+\section*{Le sucre syntaxique}
+
+
+
+\end{document}
